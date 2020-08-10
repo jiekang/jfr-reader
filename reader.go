@@ -11,6 +11,8 @@ const SHORT = 2
 const INTEGER = 4
 const LONG = 8
 
+var compressed = true
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("reader <jfr-filename>")
@@ -61,14 +63,17 @@ func chunk(b []byte) {
 	fmt.Println("ticks per second: ", asLong(tps))
 
 	fsfb := read(b, &pos, INTEGER)
-	fmt.Println("ignored: ", fsfb)
+	fmt.Println("flags: ", fsfb)
+	if fsfb[3] == 0 {
+		compressed = false
+	}
 
 	mpos := int(asLong(me))
 	metadata(b, &mpos)
 }
 
 func event(b []byte, pos *int) {
-	size := readLong(b, pos)
+	size := readInt(b, pos)
 	fmt.Println("size: ", size)
 
 	tid := readLong(b, pos)
@@ -84,20 +89,32 @@ func metadata(b []byte, pos *int) {
 	mid := readLong(b, pos)
 	fmt.Println("metadata id: ", mid)
 
-	size := readLong(b, pos)
-	fmt.Println("metadata size: ", size)
+	spSize := readInt(b, pos)
+	fmt.Println("string pool size: ", spSize)
 }
 
 func read(b []byte, pos *int, length int) []byte {
 	slice := b[*pos : *pos+length]
-	*pos = *pos + length
+	*pos += length
 	return slice
 }
 
 func readLong(b []byte, pos *int) uint64 {
-	n, l := binary.Uvarint(b[*pos:])
-	*pos += l
-	return n
+	if compressed {
+		n, l := binary.Uvarint(b[*pos:])
+		*pos += l
+		return n
+	}
+
+	return asLong(read(b, pos, LONG))
+}
+
+func readInt(b []byte, pos *int) uint32 {
+	if compressed {
+		return uint32(readLong(b, pos))
+	}
+
+	return asInt(read(b, pos, INTEGER))
 }
 
 func asShort(b []byte) uint16 {
