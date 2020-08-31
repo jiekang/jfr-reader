@@ -7,11 +7,25 @@ import (
 	"os"
 )
 
+const BYTE = 1
 const SHORT = 2
 const INTEGER = 4
 const LONG = 8
 
 var compressed = true
+
+var stringPool = []string{}
+
+type Attribute struct {
+	Name  string
+	Value string
+}
+
+type Element struct {
+	Name       string
+	Attributes []Attribute
+	Elements   []Element
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -25,10 +39,26 @@ func main() {
 		panic(err)
 	}
 
-	chunk(data)
+	if len(os.Args) == 2 {
+		chunk(data)
+	} else {
+		checkMetadata(data)
+	}
+
+}
+
+func checkMetadata(b []byte) {
+	fmt.Println(b[0:16])
+
+	i := 0
+
+	fmt.Println(readInt(b, &i))
+	fmt.Println(b[i])
 }
 
 func chunk(b []byte) {
+	fmt.Println("chunk")
+	fmt.Println()
 	pos := 0
 	magic := read(b, &pos, 4)
 	for _, c := range magic {
@@ -70,27 +100,138 @@ func chunk(b []byte) {
 
 	mpos := int(asLong(me))
 	metadata(b, &mpos)
+
+	end := int(asLong(size))
+	events(b, &pos, &end)
+}
+
+func events(b []byte, pos *int, end *int) {
+	fmt.Println()
+	fmt.Println("events")
+	fmt.Println()
+
+	count := 0
+
+	for *pos < *end {
+		event(b, pos)
+		count++
+	}
+
+	fmt.Println("event count: ", count)
 }
 
 func event(b []byte, pos *int) {
-	size := readInt(b, pos)
+	size, sr := readInt(b, pos)
 	fmt.Println("size: ", size)
 
-	tid := readLong(b, pos)
+	tid, tr := readLong(b, pos)
 	fmt.Println("type: ", tid)
+
+	// if tid == 9265 {
+	// 	e := *pos + int(size) - sr - tr
+	// 	fmt.Println("BasicEvent: ", *pos, " ", e)
+	// 	l1, _ := readLong(b, pos)
+	// 	fmt.Println("start time: ", l1)
+	// 	l2, _ := readLong(b, pos)
+	// 	fmt.Println("duration: ", l2)
+
+	// 	l3, _ := readLong(b, pos)
+	// 	fmt.Println("end time: ", l3)
+
+	// 	l4, _ := readLong(b, pos)
+	// 	fmt.Println("thread: ", l4)
+
+	// 	l5, _ := readLong(b, pos)
+	// 	fmt.Println("string type: ", l5)
+
+	// 	length, _ := readLong(b, pos)
+	// 	fmt.Println("string length: ", length)
+
+	// 	for i := 0; i < int(length); i++ {
+	// 		c, _ := readLong(b, pos)
+	// 		fmt.Printf("%c", c)
+	// 	}
+
+	// 	fmt.Println()
+
+	// 	*pos = e
+	// }
+	*pos += int(size) - sr - tr
+
 }
 
 func metadata(b []byte, pos *int) {
-	event(b, pos)
+	fmt.Println()
+	fmt.Println("chunk metadata")
+	fmt.Println()
 
-	readLong(b, pos) // start time
-	readLong(b, pos) // duration
+	size, _ := readInt(b, pos)
+	fmt.Println("size: ", size)
 
-	mid := readLong(b, pos)
+	tid, _ := readLong(b, pos)
+	fmt.Println("type: ", tid)
+
+	st, _ := readLong(b, pos) // start time
+	fmt.Println("start time: ", st)
+	d, _ := readLong(b, pos) // duration
+	fmt.Println("duration: ", d)
+
+	mid, _ := readLong(b, pos)
 	fmt.Println("metadata id: ", mid)
 
-	spSize := readInt(b, pos)
+	spSize, _ := readInt(b, pos)
 	fmt.Println("string pool size: ", spSize)
+
+	for i := 0; i < int(spSize); i++ {
+		stringPool = append(stringPool, readMetadataStringPool(b, pos))
+	}
+
+	createElement(b, pos)
+}
+
+func createElement(b []byte, pos *int) Element {
+	name := readMetadataString(b, pos)
+	element := Element{name, []Attribute{}, []Element{}}
+
+	attrCount, _ := readInt(b, pos)
+
+	for i := 0; i < int(attrCount); i++ {
+		n := readMetadataString(b, pos)
+		v := readMetadataString(b, pos)
+		element.Attributes = append(element.Attributes, Attribute{n, v})
+	}
+
+	childCount, _ := readInt(b, pos)
+
+	for i := 0; i < int(childCount); i++ {
+		c := createElement(b, pos)
+		element.Elements = append(element.Elements, c)
+	}
+
+	fmt.Println("Element: ", element.Name)
+	return element
+}
+
+func readMetadataStringPool(b []byte, pos *int) string {
+	encoding, _ := readByte(b, pos)
+	if encoding == 4 {
+		return parseCharArray(b, pos)
+	} else {
+	}
+	return ""
+}
+
+func readMetadataString(b []byte, pos *int) string {
+	index, _ := readInt(b, pos)
+	return stringPool[int(index)]
+}
+
+func parseCharArray(b []byte, pos *int) string {
+	size, _ := readInt(b, pos)
+	str := read(b, pos, int(size))
+	fmt.Println("char array ", size, " ", string(str))
+
+	return string(str)
 }
 
 func read(b []byte, pos *int, length int) []byte {
@@ -99,22 +240,27 @@ func read(b []byte, pos *int, length int) []byte {
 	return slice
 }
 
-func readLong(b []byte, pos *int) uint64 {
+func readByte(b []byte, pos *int) (byte, int) {
+	return read(b, pos, BYTE)[0], 1
+}
+
+func readLong(b []byte, pos *int) (uint64, int) {
 	if compressed {
 		n, l := binary.Uvarint(b[*pos:])
 		*pos += l
-		return n
+		return n, l
 	}
 
-	return asLong(read(b, pos, LONG))
+	return asLong(read(b, pos, LONG)), 8
 }
 
-func readInt(b []byte, pos *int) uint32 {
+func readInt(b []byte, pos *int) (uint32, int) {
 	if compressed {
-		return uint32(readLong(b, pos))
+		n, l := readLong(b, pos)
+		return uint32(n), l
 	}
 
-	return asInt(read(b, pos, INTEGER))
+	return asInt(read(b, pos, INTEGER)), 4
 }
 
 func asShort(b []byte) uint16 {
