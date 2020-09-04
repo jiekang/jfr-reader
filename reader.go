@@ -136,10 +136,10 @@ func event(b []byte, pos *int) {
 	// 	fmt.Println("duration: ", l2)
 
 	// 	l3, _ := readLong(b, pos)
-	// 	fmt.Println("end time: ", l3)
+	// 	fmt.Println("eventThread: ", l3)
 
 	// 	l4, _ := readLong(b, pos)
-	// 	fmt.Println("thread: ", l4)
+	// 	fmt.Println("stackTrace: ", l4)
 
 	// 	l5, _ := readLong(b, pos)
 	// 	fmt.Println("string type: ", l5)
@@ -194,21 +194,22 @@ func createElement(b []byte, pos *int) Element {
 	element := Element{name, []Attribute{}, []Element{}}
 
 	attrCount, _ := readInt(b, pos)
-
+	fmt.Println("Element: ", element.Name)
 	for i := 0; i < int(attrCount); i++ {
 		n := readMetadataString(b, pos)
 		v := readMetadataString(b, pos)
 		element.Attributes = append(element.Attributes, Attribute{n, v})
+		fmt.Println("Attribute: ", n, " ", v)
 	}
 
 	childCount, _ := readInt(b, pos)
+	fmt.Println("Children: ", childCount)
 
 	for i := 0; i < int(childCount); i++ {
 		c := createElement(b, pos)
 		element.Elements = append(element.Elements, c)
 	}
 
-	fmt.Println("Element: ", element.Name)
 	return element
 }
 
@@ -216,7 +217,6 @@ func readMetadataStringPool(b []byte, pos *int) string {
 	encoding, _ := readByte(b, pos)
 	if encoding == 4 {
 		return parseCharArray(b, pos)
-	} else {
 	}
 	return ""
 }
@@ -229,8 +229,6 @@ func readMetadataString(b []byte, pos *int) string {
 func parseCharArray(b []byte, pos *int) string {
 	size, _ := readInt(b, pos)
 	str := read(b, pos, int(size))
-	fmt.Println("char array ", size, " ", string(str))
-
 	return string(str)
 }
 
