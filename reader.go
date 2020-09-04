@@ -67,33 +67,33 @@ func chunk(b []byte) {
 	fmt.Println()
 
 	major := read(b, &pos, SHORT)
-	fmt.Println("major: ", asShort(major))
+	fmt.Println("major:", asShort(major))
 	minor := read(b, &pos, SHORT)
-	fmt.Println("minor: ", asShort(minor))
+	fmt.Println("minor:", asShort(minor))
 
 	size := read(b, &pos, LONG)
-	fmt.Println("size: ", asLong(size))
+	fmt.Println("size:", asLong(size))
 
 	cp := read(b, &pos, LONG)
-	fmt.Println("constant pool offset: ", asLong(cp))
+	fmt.Println("constant pool offset:", asLong(cp))
 
 	me := read(b, &pos, LONG)
-	fmt.Println("metadata offset: ", asLong(me))
+	fmt.Println("metadata offset:", asLong(me))
 
 	start := read(b, &pos, LONG)
-	fmt.Println("start nanos: ", asLong(start))
+	fmt.Println("start nanos:", asLong(start))
 
 	duration := read(b, &pos, LONG)
-	fmt.Println("duration nanos: ", asLong(duration))
+	fmt.Println("duration nanos:", asLong(duration))
 
 	cst := read(b, &pos, LONG)
-	fmt.Println("chunk start ticks: ", asLong(cst))
+	fmt.Println("chunk start ticks:", asLong(cst))
 
 	tps := read(b, &pos, LONG)
-	fmt.Println("ticks per second: ", asLong(tps))
+	fmt.Println("ticks per second:", asLong(tps))
 
 	fsfb := read(b, &pos, INTEGER)
-	fmt.Println("flags: ", fsfb)
+	fmt.Println("flags:", fsfb)
 	if fsfb[3] == 0 {
 		compressed = false
 	}
@@ -117,15 +117,15 @@ func events(b []byte, pos *int, end *int) {
 		count++
 	}
 
-	fmt.Println("event count: ", count)
+	fmt.Println("event count:", count)
 }
 
 func event(b []byte, pos *int) {
 	size, sr := readInt(b, pos)
-	fmt.Println("size: ", size)
+	fmt.Println("size:", size)
 
 	tid, tr := readLong(b, pos)
-	fmt.Println("type: ", tid)
+	fmt.Println("type:", tid)
 
 	// if tid == 9265 {
 	// 	e := *pos + int(size) - sr - tr
@@ -166,51 +166,56 @@ func metadata(b []byte, pos *int) {
 	fmt.Println()
 
 	size, _ := readInt(b, pos)
-	fmt.Println("size: ", size)
+	fmt.Println("size:", size)
 
 	tid, _ := readLong(b, pos)
-	fmt.Println("type: ", tid)
+	fmt.Println("type:", tid)
 
 	st, _ := readLong(b, pos) // start time
-	fmt.Println("start time: ", st)
+	fmt.Println("start time:", st)
 	d, _ := readLong(b, pos) // duration
-	fmt.Println("duration: ", d)
+	fmt.Println("duration:", d)
 
 	mid, _ := readLong(b, pos)
-	fmt.Println("metadata id: ", mid)
+	fmt.Println("metadata id:", mid)
 
 	spSize, _ := readInt(b, pos)
-	fmt.Println("string pool size: ", spSize)
+	fmt.Println("string pool size:", spSize)
 
 	for i := 0; i < int(spSize); i++ {
 		stringPool = append(stringPool, readMetadataStringPool(b, pos))
 	}
 
-	createElement(b, pos)
+	createElement(b, pos, 0)
 }
 
-func createElement(b []byte, pos *int) Element {
+func createElement(b []byte, pos *int, spaces int) Element {
 	name := readMetadataString(b, pos)
 	element := Element{name, []Attribute{}, []Element{}}
 
 	attrCount, _ := readInt(b, pos)
-	fmt.Println("Element: ", element.Name)
+	printWithSpaces(spaces, "E:", element.Name)
 	for i := 0; i < int(attrCount); i++ {
 		n := readMetadataString(b, pos)
 		v := readMetadataString(b, pos)
 		element.Attributes = append(element.Attributes, Attribute{n, v})
-		fmt.Println("Attribute: ", n, " ", v)
+		printWithSpaces(spaces+1, "A:", n, v)
 	}
 
 	childCount, _ := readInt(b, pos)
-	fmt.Println("Children: ", childCount)
-
 	for i := 0; i < int(childCount); i++ {
-		c := createElement(b, pos)
+		c := createElement(b, pos, spaces+4)
 		element.Elements = append(element.Elements, c)
 	}
 
 	return element
+}
+
+func printWithSpaces(spaces int, a ...interface{}) {
+	for i := 0; i < spaces; i++ {
+		fmt.Print(" ")
+	}
+	fmt.Println(a...)
 }
 
 func readMetadataStringPool(b []byte, pos *int) string {
